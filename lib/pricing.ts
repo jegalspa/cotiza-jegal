@@ -20,8 +20,6 @@ export type OtherService =
 export type MantencionService =
   | 'estufa_pellet'
   | 'aire_acondicionado'
-  | 'tubos_1_piso'
-  | 'tubos_2_pisos'
   | 'calefont'
   | 'termo_hasta_200'
   | 'termo_mas_200'
@@ -208,9 +206,6 @@ function getMantencionBasePrice(service?: MantencionService) {
       return 80000;
     case 'aire_acondicionado':
       return 50000;
-    case 'tubos_1_piso':
-      return 35000;
-    case 'tubos_2_pisos':
       return 65000;
     case 'calefont':
       return 79900;
@@ -940,8 +935,6 @@ function buildMantencionQuote(form: QuoteForm): QuoteResult {
   const titleMap: Record<string, string> = {
     estufa_pellet: 'Mantención estufa pellet',
     aire_acondicionado: 'Mantención aire acondicionado',
-    tubos_1_piso: 'Mantención tubos 1 piso',
-    tubos_2_pisos: 'Mantención tubos 2 pisos',
     calefont: 'Mantención calefont',
     termo_hasta_200: 'Mantención termo eléctrico hasta 200 lts',
     termo_mas_200: 'Mantención termo eléctrico más de 200 lts',

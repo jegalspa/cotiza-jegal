@@ -8,6 +8,7 @@ import {
   getRegionOptions,
   MainCategory,
   QuoteForm,
+  EstufaMode,
 } from '@/lib/pricing';
 
 function CotizaContent() {
@@ -62,18 +63,74 @@ function CotizaContent() {
   const regiones = useMemo(() => getRegionOptions(), []);
   const comunas = useMemo(() => getComunasByRegion(form.region), [form.region]);
 
+  /**
+   * IMPORTANTE: Este useMemo genera las opciones correctas según el combustible
+   * Si es leña: solo techo
+   * Si es pellet: muro, muro_salida_techo, preexistente, techo
+   */
+  const estufaModeOptions = useMemo<{ value: EstufaMode; label: string }[]>(() => {
+    if (form.fuelType === 'lena') {
+      // LEÑA SOLO PUEDE SER TECHO
+      return [{ value: 'techo', label: 'Instalación a techo' }];
+    }
+
+    // PELLET: todas las opciones
+    return [
+      { value: 'muro', label: 'Instalación muro' },
+      { value: 'muro_salida_techo', label: 'Instalación muro salida techo' },
+      { value: 'preexistente_1', label: 'Preexistente conexión primer piso' },
+      { value: 'preexistente_2', label: 'Preexistente conexión segundo piso' },
+      { value: 'techo', label: 'Instalación a techo' },
+    ];
+  }, [form.fuelType]);
+
   useEffect(() => {
     setForm((prev) => ({ ...prev, category: initialCategory }));
   }, [initialCategory]);
 
+  /**
+   * EFECTO CRÍTICO: Cuando cambias a leña, fuerza estufaMode a 'techo'
+   * y limpia todos los campos relacionados a muro
+   */
+  useEffect(() => {
+    if (form.fuelType === 'lena' && form.estufaMode !== 'techo') {
+      setForm((prev) => ({
+        ...prev,
+        estufaMode: 'techo', // Fuerza a techo
+        materialMuro: '',
+        tieneCobertizo: 'no',
+        tipoTechoCobertizo: '',
+        salidaMuro: '',
+        quiereJuegoCodos: 'no',
+      }));
+    }
+  }, [form.fuelType, form.estufaMode]);
+
   function updateField<K extends keyof QuoteForm>(name: K, value: QuoteForm[K]) {
+    // Si cambias a leña, INMEDIATAMENTE fuerza techo
+    if (name === 'fuelType' && value === 'lena') {
+      setForm({
+        ...form,
+        fuelType: 'lena',
+        estufaMode: 'techo',
+        materialMuro: '',
+        tieneCobertizo: 'no',
+        tipoTechoCobertizo: '',
+        salidaMuro: '',
+        quiereJuegoCodos: 'no',
+      });
+      return;
+    }
+
     setForm((prev) => {
       const updated = { ...prev, [name]: value };
 
+      // Limpia comuna si cambias región
       if (name === 'region') {
         updated.comuna = '';
       }
 
+      // Reset total si cambias categoría
       if (name === 'category') {
         setResultado(null);
         setStep(1);
@@ -82,12 +139,14 @@ function CotizaContent() {
         setErrorPago('');
       }
 
-      if (name === 'estufaMode' && value === 'muro') {
+      // Si seleccionas muro o muro_salida_techo, limpia campos de techo
+      if (name === 'estufaMode' && (value === 'muro' || value === 'muro_salida_techo')) {
         updated.tipoTecho = '';
         updated.tipoCielo = '';
         updated.formaTecho = 'plano';
       }
 
+      // Si seleccionas techo, limpia campos de muro
       if (name === 'estufaMode' && value === 'techo') {
         updated.materialMuro = '';
         updated.tieneCobertizo = 'no';
@@ -254,6 +313,11 @@ function CotizaContent() {
         return false;
       }
 
+      // Validación: leña solo puede ser techo (redundante, pero por seguridad)
+      if (form.fuelType === 'lena' && form.estufaMode !== 'techo') {
+        return false;
+      }
+
       if (
         (form.estufaMode === 'preexistente_1' || form.estufaMode === 'preexistente_2') &&
         form.yaTieneEstufa === 'no' &&
@@ -262,8 +326,9 @@ function CotizaContent() {
         return false;
       }
 
-      if (form.estufaMode === 'muro') {
+      if (form.estufaMode === 'muro' || form.estufaMode === 'muro_salida_techo') {
         if (!form.materialMuro || !form.tieneCobertizo) return false;
+
         if (
           form.tieneCobertizo === 'si' &&
           (!form.tipoTechoCobertizo || !form.salidaMuro)
@@ -283,7 +348,9 @@ function CotizaContent() {
         }
       }
 
-      if (form.yaTieneEstufa === 'no' && !form.metrajeCalefaccionar) return false;
+      if (form.yaTieneEstufa === 'no' && !form.metrajeCalefaccionar) {
+        return false;
+      }
 
       return true;
     }
@@ -457,7 +524,7 @@ function CotizaContent() {
                           className="w-full rounded-2xl border border-neutral-300 p-4"
                           value={form.fuelType}
                           onChange={(e) =>
-                            updateField('fuelType', e.target.value as QuoteForm['fuelType'])
+                            updateField('fuelType', e.target.value as 'pellet' | 'lena')
                           }
                         >
                           <option value="pellet">Pellet</option>
@@ -471,13 +538,14 @@ function CotizaContent() {
                           className="w-full rounded-2xl border border-neutral-300 p-4"
                           value={form.estufaMode}
                           onChange={(e) =>
-                            updateField('estufaMode', e.target.value as QuoteForm['estufaMode'])
+                            updateField('estufaMode', e.target.value as EstufaMode)
                           }
                         >
-                          <option value="muro">Instalación muro</option>
-                          <option value="preexistente_1">Preexistente conexión primer piso</option>
-                          <option value="preexistente_2">Preexistente conexión segundo piso</option>
-                          <option value="techo">Instalación a techo</option>
+                          {estufaModeOptions.map((option) => (
+                            <option key={option.value} value={option.value}>
+                              {option.label}
+                            </option>
+                          ))}
                         </select>
                       </div>
                     </div>
@@ -698,7 +766,7 @@ function CotizaContent() {
                         className="w-full rounded-2xl border border-neutral-300 p-4"
                         value={form.otherService}
                         onChange={(e) =>
-                          updateField('otherService', e.target.value as QuoteForm['otherService'])
+                          updateField('otherService', e.target.value as any)
                         }
                       >
                         <option value="aire_split">Aire acondicionado split muro</option>
@@ -748,14 +816,12 @@ function CotizaContent() {
                       onChange={(e) =>
                         updateField(
                           'mantencionService',
-                          e.target.value as QuoteForm['mantencionService']
+                          e.target.value as any
                         )
                       }
                     >
                       <option value="estufa_pellet">Mantención estufa pellet</option>
                       <option value="aire_acondicionado">Aire acondicionado</option>
-                      <option value="tubos_1_piso">Tubos 1 piso</option>
-                      <option value="tubos_2_pisos">Tubos 2 pisos</option>
                       <option value="calefont">Calefont</option>
                       <option value="termo_hasta_200">Termo eléctrico hasta 200 lts</option>
                       <option value="termo_mas_200">Termo eléctrico más de 200 lts</option>
