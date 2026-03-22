@@ -83,7 +83,7 @@ function normalizeText(value: string) {
     .toLowerCase()
     .normalize('NFD')
     .replace(/[\u0300-\u036f]/g, '')
-    .replace(/[’']/g, '')
+    .replace(/['']/g, '')
     .replace(/\s+/g, ' ')
     .trim();
 }
@@ -141,7 +141,28 @@ function getPromoDiscount(total: number, promoCode?: string) {
   };
 }
 
-function getEstufaRecommendation(metraje?: string) {
+/**
+ * Recomendación de estufas a LEÑA según metraje
+ */
+function getWoodStoveRecommendation(metraje?: string) {
+  if (!metraje) return '';
+
+  const mapping: Record<string, string> = {
+    hasta_100: 'Scantek 350, Nordic 350 o Rondo 440',
+    hasta_120: 'Scantek 360, Nordic 360 o Rondo 450',
+    hasta_160:
+      'Scantek 380, Nordic 380, Nordic 450, Rondo 490, Classic 500, Classic 400, Classic 600 o Corner 650',
+    mas_160:
+      'Scantek 380, Nordic 380, Nordic 450, Rondo 490, Classic 500, Classic 400, Classic 600 o Corner 650',
+  };
+
+  return mapping[metraje] || '';
+}
+
+/**
+ * Recomendación de estufas a PELLET según metraje
+ */
+function getPelletStoveRecommendation(metraje?: string) {
   if (!metraje) return '';
 
   const mapping: Record<string, string> = {
@@ -152,6 +173,19 @@ function getEstufaRecommendation(metraje?: string) {
   };
 
   return mapping[metraje] || '';
+}
+
+/**
+ * Retorna recomendación de estufa según combustible y metraje
+ */
+function getEstufaRecommendation(fuelType?: EstufaFuel, metraje?: string) {
+  if (!metraje) return '';
+
+  if (fuelType === 'lena') {
+    return getWoodStoveRecommendation(metraje);
+  }
+
+  return getPelletStoveRecommendation(metraje);
 }
 
 function getAirePrice(metros?: number) {
@@ -206,7 +240,6 @@ function getMantencionBasePrice(service?: MantencionService) {
       return 80000;
     case 'aire_acondicionado':
       return 50000;
-      return 65000;
     case 'calefont':
       return 79900;
     case 'termo_hasta_200':
@@ -634,6 +667,14 @@ function buildEstufaQuote(form: QuoteForm): QuoteResult {
     observaciones.push('El máximo de pisos soportado por este cotizador es 2 pisos.');
   }
 
+  // VALIDACIÓN: Leña SOLO puede ser instalación a techo
+  if (form.fuelType === 'lena' && form.estufaMode !== 'techo') {
+    factible = false;
+    observaciones.push(
+      'Las instalaciones de leña en este cotizador solo están permitidas con salida a techo.'
+    );
+  }
+
   if (form.estufaMode === 'muro' || form.estufaMode === 'muro_salida_techo') {
     titulo = `Instalación ${fuelLabel} por muro`;
 
@@ -809,11 +850,14 @@ function buildEstufaQuote(form: QuoteForm): QuoteResult {
     );
   }
 
-  if (form.metrajeCalefaccionar) {
-    const reco = getEstufaRecommendation(form.metrajeCalefaccionar);
-    if (reco) {
-      observaciones.push(`Recomendación de estufa según m²: ${reco}.`);
-    }
+  // Recomendación de estufa: pellet o leña según combustible
+  const recomendacionEstufa =
+    form.yaTieneEstufa === 'no'
+      ? getEstufaRecommendation(form.fuelType, form.metrajeCalefaccionar)
+      : '';
+
+  if (recomendacionEstufa) {
+    observaciones.push(`Recomendación de estufa según m²: ${recomendacionEstufa}.`);
   }
 
   observaciones.push(
@@ -837,7 +881,7 @@ function buildEstufaQuote(form: QuoteForm): QuoteResult {
     totalManoObra: Math.max(totalManoObra, 0),
     materiales,
     observaciones,
-    recomendacionEstufa: getEstufaRecommendation(form.metrajeCalefaccionar),
+    recomendacionEstufa,
     comunaEsUrbana,
     promoCode: promo.code,
     promoDiscount: promo.amount,
