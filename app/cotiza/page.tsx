@@ -172,41 +172,62 @@ function CotizaContent() {
   }
 
   async function solicitarInstalacion() {
-    if (!resultado) return;
-
-    setPagando(true);
-    setErrorPago('');
-
     try {
-      const res = await fetch('/api/pago', {
+      if (!resultado) return;
+
+      setPagando(true);
+      setErrorPago('');
+
+      const saveRes = await fetch('/api/cotizaciones/guardar', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+        },
         body: JSON.stringify({
-          titulo: resultado.titulo,
-          total: resultado.totalManoObra,
-          cliente,
+          cliente: {
+            ...cliente,
+            region: form.region,
+            comuna: form.comuna,
+          },
+          quote: resultado,
           form,
         }),
       });
 
-      const data = await res.json();
+      const saveData = await saveRes.json();
 
-      if (!res.ok || !data.ok) {
-        throw new Error(
-          `${data.message || 'No se pudo iniciar el pago'} ${
-            data.error ? JSON.stringify(data.error) : ''
-          }`
-        );
+      if (!saveRes.ok || !saveData.ok) {
+        throw new Error(saveData?.message || 'No se pudo guardar la cotización');
       }
 
-      const destino = data.init_point || data.sandbox_init_point;
+      const res = await fetch('/api/mercadopago/create-preference', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          title: `Servicio JEGAL - ${resultado.titulo}`,
+          unit_price: resultado.totalManoObra,
+          quantity: 1,
+          quoteId: saveData.cotizacionId,
+          customer: {
+            name: cliente.nombre,
+            email: cliente.email,
+          },
+        }),
+      });
 
-      if (destino) {
-        window.location.href = destino;
-        return;
+      const paymentData = await res.json();
+
+      if (!res.ok) {
+        throw new Error(paymentData?.message || 'Error creando el pago');
       }
 
-      throw new Error('Mercado Pago no devolvió init_point');
+      if (!paymentData.initPoint) {
+        throw new Error('Mercado Pago no devolvió initPoint');
+      }
+
+      window.location.href = paymentData.initPoint;
     } catch (error) {
       console.error(error);
       setErrorPago(
@@ -293,9 +314,7 @@ function CotizaContent() {
             JEGAL
           </p>
 
-          <h1 className="text-3xl font-extrabold md:text-5xl">
-            Cotizador JEGAL
-          </h1>
+          <h1 className="text-3xl font-extrabold md:text-5xl">Cotizador JEGAL</h1>
 
           <p className="mt-3 max-w-3xl text-neutral-600">
             Cotiza mano de obra referencial para estufas, otros servicios y mantenciones.
@@ -594,7 +613,6 @@ function CotizaContent() {
                             >
                               <option value="1">1 piso</option>
                               <option value="2">2 pisos</option>
-                              <option value="3">3 pisos (no factible)</option>
                             </select>
                           </div>
 
@@ -739,15 +757,9 @@ function CotizaContent() {
                       <option value="tubos_1_piso">Tubos 1 piso</option>
                       <option value="tubos_2_pisos">Tubos 2 pisos</option>
                       <option value="calefont">Calefont</option>
-                      <option value="termo_hasta_200">
-                        Termo eléctrico hasta 200 lts
-                      </option>
-                      <option value="termo_mas_200">
-                        Termo eléctrico más de 200 lts
-                      </option>
-                      <option value="bomba_calor_piscina">
-                        Bomba de calor piscina
-                      </option>
+                      <option value="termo_hasta_200">Termo eléctrico hasta 200 lts</option>
+                      <option value="termo_mas_200">Termo eléctrico más de 200 lts</option>
+                      <option value="bomba_calor_piscina">Bomba de calor piscina</option>
                     </select>
                   </div>
                 </>
@@ -930,7 +942,7 @@ function CotizaContent() {
                   <button
                     type="button"
                     onClick={solicitarInstalacion}
-                    disabled={pagando || !resultado}
+                    disabled={pagando || !resultado || !puedeGuardar}
                     className="rounded-2xl bg-black px-5 py-3 font-semibold text-white disabled:cursor-not-allowed disabled:opacity-40"
                   >
                     {pagando ? 'Redirigiendo...' : 'Solicitar instalación'}

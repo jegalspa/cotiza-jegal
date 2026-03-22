@@ -1,5 +1,5 @@
 const DIRECTUS_URL = process.env.DIRECTUS_URL!;
-const DIRECTUS_STATIC_TOKEN = process.env.DIRECTUS_STATIC_TOKEN!;
+const DIRECTUS_STATIC_TOKEN = process.env.DIRECTUS_TOKEN!;
 
 type DirectusCreateResponse<T> = {
   data: T;
